@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Mario — a vanilla JavaScript platformer</title>
+<meta name="description" content="A five-level Mario-style platform game written in plain JavaScript on a single HTML canvas. No frameworks, no build step.">
+<meta name="theme-color" content="#0b0b12">
+<link rel="icon" href="img/logo.png" type="image/png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <header id="hud">
+    <div class="hud-item"><span class="hud-label">Score</span><span id="hud-score">000000</span></div>
+    <div class="hud-item"><span class="hud-label">Coins</span><span id="hud-coins">00</span></div>
+    <div class="hud-item"><span class="hud-label">World</span><span id="hud-world">1-1</span></div>
+    <div class="hud-item"><span class="hud-label">Mario</span><span id="hud-lives">x3</span></div>
+    <div class="hud-item"><span class="hud-label">Time</span><span id="hud-time">300</span></div>
+    <button id="mute-btn" type="button" aria-pressed="false">Sound: on</button>
+  </header>
+
+  <main id="stage">
+    <canvas id="game" width="1200" height="480" aria-label="Game screen"></canvas>
+    <div id="overlay" class="overlay" hidden></div>
+  </main>
+
+  <div id="touch" aria-hidden="true">
+    <div class="pad">
+      <button id="btn-left" type="button">&#9664;</button>
+      <button id="btn-right" type="button">&#9654;</button>
+    </div>
+    <button id="btn-jump" type="button">JUMP</button>
+  </div>
+
+  <footer id="controls">
+    <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> move</span>
+    <span><kbd>&uarr;</kbd> / <kbd>space</kbd> jump</span>
+    <span><kbd>P</kbd> pause</span>
+    <span><kbd>R</kbd> restart level</span>
+    <span><kbd>M</kbd> sound</span>
+  </footer>
+
+</div>
+
+<script src="js/levels.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

@@ -1,57 +1,214 @@
+/*  style.css — chrome around the canvas.
+ *  The game itself is drawn entirely in js/game.js; everything here is the
+ *  HUD, the overlay screens and the touch pad. */
+
 @font-face {
-	font-family: mario;
-	src: url('SuperMario256.ttf');
+  font-family: mario;
+  src: url('SuperMario256.ttf') format('truetype');
+  font-display: swap;
 }
 
-body{
-	background: #000;
-	font-family: mario;
-	margin: 10px;
-	text-align: center;
+:root {
+  --ink: #f6f6f8;
+  --dim: #9aa0b5;
+  --red: #e03d3d;
+  --red-dark: #a52626;
+  --panel: #14141f;
+  --bg: #0b0b12;
+  --sky: #5c94fc;
+  --gold: #fbd000;
 }
 
-#start-screen{
-	background: url('../img/bg.png');
-	width: 1200px;
-	height: 500px;
-	margin: auto;
-	margin-top: 80px;
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: mario, "Trebuchet MS", system-ui, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12px;
+  -webkit-text-size-adjust: 100%;
 }
 
-.header{
-	font-size: 50px;
-	padding-top: 10px;
-	text-align: center;
-	color:#e03d3d ;
-	filter: drop-shadow(15px 5px 4px #BA7A6D);
+#app {
+  width: min(1200px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-#logo{
-	height: 100px;
-	width: 100px;	
+/* ------------------------------------------------------------------ hud */
+#hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border: 2px solid #262637;
+  border-radius: 6px;
+  font-size: clamp(11px, 2.4vw, 15px);
+  letter-spacing: 1px;
+}
+.hud-item { display: flex; flex-direction: column; line-height: 1.35; }
+.hud-label { color: var(--dim); font-size: 0.72em; letter-spacing: 2px; }
+#hud-time { color: var(--gold); }
+#mute-btn {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.8em;
+  color: var(--dim);
+  background: transparent;
+  border: 2px solid #2f2f45;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+#mute-btn:hover { color: var(--ink); border-color: var(--red); }
+
+/* ------------------------------------------------------------------ stage */
+#stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1200 / 480;
+  background: var(--sky);
+  border: 2px solid #262637;
+  border-radius: 6px;
+  overflow: hidden;
+}
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
-#start-btn{
-	box-shadow: 10px 10px 5px #BA7A6D;
-	font-family: mario;
-	color: #fff;
-	font-size: 20px;
-	margin-top: 50px;
-	height: 50px;
-	width: 200px;
-	background-color:#e03d3d;
+/* ------------------------------------------------------------------ overlay */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(6, 6, 12, 0.82);
+  overflow-y: auto;
+}
+.overlay[hidden] { display: none !important; }
+
+.panel {
+  width: min(640px, 100%);
+  text-align: center;
+  padding: clamp(12px, 3vw, 28px);
+}
+.panel h1 {
+  margin: 4px 0 2px;
+  font-size: clamp(34px, 8vw, 64px);
+  color: var(--red);
+  filter: drop-shadow(6px 4px 0 #7a2020);
+  letter-spacing: 2px;
+}
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: clamp(22px, 5vw, 36px);
+  color: var(--gold);
+}
+.logo { width: 76px; height: 76px; object-fit: contain; }
+.sub { margin: 4px 0 16px; color: var(--dim); font-size: clamp(11px, 2.4vw, 14px); }
+.hint { margin: 18px 0 8px; color: var(--dim); font-size: 11px; letter-spacing: 2px; }
+.best { margin: 14px 0 4px; color: var(--gold); font-size: 12px; }
+.keys { margin: 6px 0 0; color: #6f7490; font-size: 10px; line-height: 1.9; }
+.score-big { font-size: clamp(30px, 7vw, 48px); color: var(--gold); margin: 6px 0 16px; }
+
+.panel button {
+  font: inherit;
+  font-size: clamp(12px, 2.6vw, 16px);
+  color: var(--ink);
+  background: #22223a;
+  border: 2px solid #33334f;
+  border-radius: 6px;
+  padding: 12px 22px;
+  margin: 6px 5px;
+  cursor: pointer;
+  transition: transform .06s ease, background .12s ease;
+}
+.panel button:hover:not(:disabled) { background: #2c2c4a; }
+.panel button:active:not(:disabled) { transform: translateY(2px); }
+.panel button.primary {
+  background: var(--red);
+  border-color: var(--red-dark);
+  box-shadow: 0 4px 0 var(--red-dark);
+}
+.panel button.primary:hover { background: #ee4b4b; }
+.panel button:disabled { opacity: .35; cursor: not-allowed; }
+
+.levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+  margin: 4px 0;
+}
+.levels .lvl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 6px;
+}
+.lvl-id { color: var(--gold); font-size: 1.1em; }
+.lvl-name { color: var(--dim); font-size: 0.62em; letter-spacing: 1px; }
+
+.tally { width: min(320px, 100%); margin: 0 auto 14px; border-collapse: collapse; font-size: 13px; }
+.tally td { padding: 7px 4px; color: var(--dim); text-align: left; }
+.tally td:last-child { text-align: right; color: var(--ink); }
+.tally .total td { border-top: 2px solid #33334f; color: var(--gold); padding-top: 10px; }
+
+/* ------------------------------------------------------------------ touch */
+#touch { display: none; }
+#touch button {
+  font: inherit;
+  color: var(--ink);
+  background: #1c1c2c;
+  border: 2px solid #33334f;
+  border-radius: 10px;
+  padding: 18px 26px;
+  font-size: 20px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+#touch button:active { background: var(--red); }
+#touch .pad { display: flex; gap: 10px; }
+
+@media (hover: none) and (pointer: coarse) {
+  #touch { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  #controls { display: none; }
 }
 
-#instructions{
-	color: #fff;
-	display: none;
+/* ------------------------------------------------------------------ footer */
+#controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  justify-content: center;
+  color: #6f7490;
+  font-size: 10px;
+  letter-spacing: 1px;
 }
-
-#gameScore{
-	color: #fff;
-	font-size: 20px;
-	height: 10px;
-	text-align: left;
-	margin: 0 0 15px 170px;
-	display: none;
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 2px 5px;
+  margin: 0 2px;
+  background: #1c1c2c;
+  border: 1px solid #33334f;
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  font-family: inherit;
+  color: var(--ink);
 }
