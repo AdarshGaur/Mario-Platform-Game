@@ -55,10 +55,10 @@ best score, mute) is kept in `localStorage`.
 | | Name | Width | Coin blocks | What it is |
 | --- | --- | --- | --- | --- |
 | 1-1 | Overworld | 130 tiles | 13 | The original level: pipes, brick rows, a stone staircase. |
-| 1-2 | Pipe Valley | 150 tiles | 15 | A forest of pipes with three holes in the ground. |
-| 1-3 | Sky Steps | 160 tiles | 12 | Two long chasms crossed on floating stone steps. |
+| 1-2 | Pipe Valley | 150 tiles | 12 | A forest of pipes with three holes in the ground. |
+| 1-3 | Sky Steps | 160 tiles | 8 | Two long chasms crossed on floating stone steps. |
 | 1-4 | Brick Fortress | 170 tiles | 15 | Low brick ceilings, stair pyramids, climbing platforms. |
-| 1-5 | The Long Run | 200 tiles | 24 | Everything at once, twice as long. |
+| 1-5 | The Long Run | 200 tiles | 21 | Everything at once, twice as long. |
 
 ---
 
@@ -136,7 +136,9 @@ the right place to ask what is beside it, which is resolved by undoing the move.
    * A 3-tile climb only works if the gap in front of it is **≤ 2 tiles**.
    * A flat gap can be **4 tiles at most**, and only with a tile or two of
      run-up; 3 is the comfortable maximum.
-   * A coin block is only bumpable **4–5 rows above the floor you stand on**.
+   * A coin block is only bumpable **5 rows above the floor you stand on** —
+     and bumping one stops you rising, so never put one over the run-up to a
+     jump you have to make. That costs 158px of reach, leaving 113px.
    * Leave **2 empty rows** above anything you expect the player to stand on,
      or he cannot fit there.
 3. Check it:
@@ -171,79 +173,6 @@ the right place to ask what is beside it, which is resolved by undoing the move.
    is a crude player with no lookahead, so a level it fails is worth a look but
    is not necessarily broken — `check_levels.py` is the authority on whether a
    route exists at all.
-
----
-
-## Deploying
-
-The repository root *is* the site: static files, relative paths, no build step.
-Every option below is free.
-
-### GitHub Pages
-
-`.github/workflows/deploy.yml` is already here. Push to `main`, then set
-**Settings → Pages → Source** to **GitHub Actions** once. The site lands on
-`https://<user>.github.io/Mario-Platform-Game/`; the relative paths mean the
-sub-path is fine.
-
-### Netlify
-
-`netlify.toml` sets the publish directory and cache headers.
-
-```bash
-npx netlify-cli deploy --prod
-```
-
-Or connect the repository in the Netlify UI, leave the build command empty and
-set the publish directory to `.`.
-
-### Vercel
-
-`vercel.json` does the same.
-
-```bash
-npx vercel --prod
-```
-
-Pick **Other** as the framework preset and leave the build command empty.
-
-### Cloudflare Pages
-
-Connect the repository, leave the build command empty and set the output
-directory to `/`. No config file needed.
-
-### Notes for any host
-
-* Every path in `index.html` is relative, so the game works from a sub-path.
-* Total payload is about **2 MB**, of which 1.7 MB is audio — the music is the
-  single biggest file, and it streams rather than blocking the start.
-* Browsers block audio until the first interaction, so the music starts on the
-  click or key that starts a level. That is expected, not a bug.
-
----
-
-## What changed from the original
-
-The original version was one 500-line file with a single level, and the level
-could not actually be finished: at column 47 a four-tile-tall pipe blocks the
-way, and a running jump reaches 124px where 128px is needed. Past it, a ten-tile
-pit had no crossing at all. It was only passable using an
-undocumented speed cheat left in the code.
-
-* Level 1-1's two four-tile pipes are now three tiles, and the ten-tile pit has
-  stepping stones. The rest of the layout is the original, tile for tile.
-* One level became five, driven by data instead of a hard-coded 130-column map.
-* Added: lives, a clock, a pause screen, a level picker with unlock progress,
-  a score that persists, touch controls, deep links, and a mute toggle.
-* Fixed: the head-bump check used a value computed once for the whole game, so
-  only the first coin block ever behaved correctly; the background music was
-  restarted on every frame; `window.close()` was called on a game over, which
-  browsers ignore.
-* The camera is clamped to the level instead of a hard-coded scroll limit, and
-  drawing is culled to the visible columns.
-
-Physics constants and the sprite coordinates are untouched, so it still moves
-and looks like the original.
 
 ---
 

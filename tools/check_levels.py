@@ -119,6 +119,18 @@ def ledges(rows):
     return [tuple(s) for s in segs]
 
 
+def walk_off_ok(rows, row, x1):
+    """Can he just run off the end of this ledge and land safely?"""
+    st = (float(max(0, x1 - 5) * TS), float(row * TS - PLAYER_H), 0.0, 0.0, True)
+    for _ in range(200):
+        st = advance(rows, st, True, False)
+        if st[1] >= DEATH_Y:
+            return False
+        if st[4] and st[0] > (x1 + 1) * TS:
+            return True
+    return False
+
+
 def lint(rows):
     """Warnings about shapes that have broken this game before."""
     notes = []
@@ -136,21 +148,24 @@ def lint(rows):
                 notes.append('columns %d-%d are a %d-tile hole; 4 is the most a '
                              'running jump clears' % (start, start + run - 1, run))
             run = 0
-    # a ceiling under five rows up cuts a jump short, which only matters
-    # where the ledge has to be jumped off the end of
+    # anything within five rows above a ledge cuts a jump off it short: 158px
+    # of reach becomes 113px at five rows and 84px at four
     for row, x0, x1 in ledges(rows):
         after = x1 + 1
         if after >= cols:
             continue
         if any(rows[y][after] in SOLID for y in range(row, ROWS)):
-            continue                       # solid ground beyond, no jump needed
+            continue                       # ground carries on, nothing to clear
+        if walk_off_ok(rows, row, x1):
+            continue                       # you can step off it, no jump needed
         for x in range(max(x0, x1 - 3), x1 + 1):
-            hit = next((y for y in range(row - 1, max(-1, row - 5), -1)
+            hit = next((y for y in range(row - 1, max(-1, row - 6), -1)
                         if rows[y][x] in SOLID), None)
             if hit is not None:
-                notes.append('the ledge on row %d ending at column %d has to be '
-                             'jumped off, but a ceiling %d rows above it (row %d) '
-                             'cuts the jump short' % (row, x1, row - hit, hit))
+                notes.append('column %d is %d rows above the ledge on row %d that '
+                             'ends at column %d, and that ledge has to be jumped '
+                             'off — the block cuts the jump short'
+                             % (x, row - hit, row, x1))
                 break
     return notes
 
