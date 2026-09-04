@@ -1,22 +1,16 @@
 #!/usr/bin/env python3
-"""Checks that every level in js/levels.js can actually be finished.
+"""Checks that every level in js/levels.js can be finished.
 
-The physics below is a frame-for-frame copy of step() and collide() in
-js/game.js — same constants, same order of resolution, same tile lookups. From
-the spawn point it searches forward through every reachable player state
-(position, velocity, feet on the ground or not), choosing each frame between
-running right, running right and jumping, and coasting. If no state ever
-crosses the flagpole, the level cannot be finished and it says where the run
-dries up.
+The physics here is a copy of step() and collide() from js/game.js. From the
+spawn it searches forward through reachable player states, each frame either
+running, running and jumping, or coasting, and looks for one that crosses the
+flagpole.
 
-    python3 tools/check_levels.py            # all levels
-    python3 tools/check_levels.py 1-3        # just one
-
-Exit status is non-zero if any level cannot be finished.
+    python3 tools/check_levels.py [1-3 ...]
 """
 import heapq, os, re, sys
 
-# --- the engine's constants, verbatim (js/game.js) ---------------------------
+# same numbers as js/game.js
 GRAVITY, FRICTION, ACCEL, JUMP_IMPULSE = 1.0, 0.9, 0.5, 25.0
 TS, PLAYER_W, PLAYER_H, BOX_TOP = 32, 32, 50, 18
 DEATH_Y = 480 - 62
@@ -24,13 +18,11 @@ ROWS = 15
 SOLID = set('#?b=[]<>x')       # '.', '|' and 'F' are passable
 SPAWN = (224.0, 292.0)
 
-# state quantisation for the visited set — fine enough not to skip a landing,
-# coarse enough that the search stays in the tens of thousands of states
-QX, QY, QV = 3.0, 3.0, 0.4
+QX, QY, QV = 3.0, 3.0, 0.4      # visited-set buckets
 
 
 def solid(rows, cx, cy):
-    """tileAt() + isSolid(): off the sides is wall, above and below is open air."""
+    """tileAt() + isSolid(): walls at the sides, open air above and below."""
     if cx < 0 or cx >= len(rows[0]):
         return True
     if cy < 0 or cy >= ROWS:
@@ -39,7 +31,7 @@ def solid(rows, cx, cy):
 
 
 def advance(rows, st, right, jump):
-    """One frame of the engine. st is (x, y, sx, sy, on_ground)."""
+    """One frame. st is (x, y, sx, sy, on_ground)."""
     x, y, sx, sy, on_ground = st
     if jump and on_ground:
         sy -= JUMP_IMPULSE
@@ -54,7 +46,7 @@ def advance(rows, st, right, jump):
     sy *= FRICTION
     on_ground = False
 
-    if sy >= 0:                                        # vertical first
+    if sy >= 0:                                # vertical before horizontal
         feet = int((y + PLAYER_H) // TS)
         if solid(rows, int((x + 8) // TS), feet) or solid(rows, int((x + 24) // TS), feet):
             y = feet * TS - PLAYER_H
@@ -67,7 +59,7 @@ def advance(rows, st, right, jump):
             y = (head_row + 1) * TS - BOX_TOP
             sy = 0.0
 
-    row_top = int((y + BOX_TOP) // TS)                 # then horizontal
+    row_top = int((y + BOX_TOP) // TS)
     row_bottom = int((y + PLAYER_H - 1) // TS)
     if sx > 0:
         cxr = int((x + PLAYER_W) // TS)
@@ -87,11 +79,7 @@ def key(st):
 
 
 def search(rows, pole_col, limit=1500000):
-    """Best-first over player states, driven toward the flagpole.
-
-    Returns (reachable, furthest x, states examined). Exhausting the queue
-    without reaching the pole is a proof that the level is unfinishable, up to
-    the state quantisation."""
+    """Best-first over player states. Returns (reachable, furthest x, states)."""
     goal_x = pole_col * TS
     start = (SPAWN[0], SPAWN[1], 0.0, 0.0, False)
     seen = {key(start)}
@@ -118,9 +106,8 @@ def search(rows, pole_col, limit=1500000):
     return False, furthest, len(seen)
 
 
-# --- advisory geometry lint --------------------------------------------------
 def ledges(rows):
-    """Runs of tiles the player can stand on with room to fit above."""
+    """Runs of tiles you can stand on with room to fit above."""
     segs = []
     for y in range(2, ROWS):
         for x in range(len(rows[0])):
@@ -133,7 +120,7 @@ def ledges(rows):
 
 
 def lint(rows):
-    """Cheap warnings about the shapes that historically broke this game."""
+    """Warnings about shapes that have broken this game before."""
     notes = []
     cols = len(rows[0])
     # a pit wider than four tiles cannot be jumped even at full speed
@@ -149,8 +136,8 @@ def lint(rows):
                 notes.append('columns %d-%d are a %d-tile hole; 4 is the most a '
                              'running jump clears' % (start, start + run - 1, run))
             run = 0
-    # a ceiling closer than five rows above a ledge cuts a jump short, which
-    # only matters where the player has to jump off the end of that ledge
+    # a ceiling under five rows up cuts a jump short, which only matters
+    # where the ledge has to be jumped off the end of
     for row, x0, x1 in ledges(rows):
         after = x1 + 1
         if after >= cols:

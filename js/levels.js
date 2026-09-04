@@ -1,23 +1,14 @@
-/*  levels.js — level data for the Mario platform game.
+/*  Level data. Each level is 15 rows of characters, one per 32x32 tile.
  *
- *  A level is 15 rows of characters, one character per 32x32 tile.
- *  Row 13-14 are normally the ground; the player dies below row 14.
+ *    .  sky        =  stair block     <> pipe mouth
+ *    #  ground     |  flagpole        [] pipe body
+ *    ?  coin block F  flag
+ *    b  brick      x  spent coin block
  *
- *    .  sky / empty            =  stone stair block
- *    #  ground                 |  flagpole
- *    ?  coin block (bumpable)  F  flag
- *    b  brick                  x  already-used coin block
- *    <> pipe mouth (2 tiles)   [] pipe body (2 tiles)
- *
- *  DESIGN ENVELOPE — derived from the physics in game.js, do not exceed:
- *    * jump apex is 124px, so the player can climb AT MOST 3 tiles;
- *      a 3-tile climb only works if the gap in front of it is <= 2 tiles.
- *    * a full-speed running jump covers 160px, so a flat gap of
- *      4 tiles is the maximum, and only with a tile or two of run-up.
- *    * a coin block is only bumpable 4-5 rows above the floor you stand on.
- *    * keep 2 empty rows above any surface you expect the player to stand on.
- *
- *  tools/check_levels.py re-verifies all of this; run it after editing.
+ *  What the physics allows: a 3 tile climb (and only over a gap of 2 or less),
+ *  a 4 tile gap flat out, coin blocks 4-5 rows above the floor you jump from,
+ *  and 2 clear rows above anything you expect to stand on. When in doubt run
+ *  tools/check_levels.py, which plays the level to see if it can be finished.
  */
 
 var TILE = { SKY:0, GROUND:1, COIN:2, BRICK:3, STAIR:4, POLE:5, FLAG:6,
@@ -149,8 +140,7 @@ var LEVELS = [
   },
 ];
 
-/* Turns the character rows into a flat Uint8Array plus the metadata the
- * engine needs (size in pixels, where the flagpole is, ...). */
+/* rows of characters -> flat tile array + the bits the engine needs */
 function decodeLevel(def) {
   var rows = def.rows, h = rows.length, w = rows[0].length;
   var map = new Uint8Array(w * h), poleCol = -1, flagCol = -1;

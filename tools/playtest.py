@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Plays every level with a simple bot and reports whether each one can be finished.
+"""Plays every level with a dumb bot and reports which ones it finishes.
 
-Drives a headless Chromium over the DevTools protocol: a script injected into the
-page holds "right" and jumps whenever the tile ahead is a wall or a hole, which is
-all a level built inside the design envelope in js/levels.js should ever need.
+Drives headless Chromium over the DevTools protocol. The injected bot holds
+"right" and jumps at walls and holes; it has no lookahead, so a level it fails
+is worth a look but is not proof of anything. check_levels.py is the authority.
 
     python3 -m http.server 8877 &
-    python3 tools/playtest.py
+    python3 tools/playtest.py [1-3 ...]
 """
 import asyncio, json, subprocess, sys, time, urllib.request
 import websockets
@@ -32,10 +32,8 @@ BOT = r"""
     st.lastX = p.x;
     var col = Math.floor((p.x + 16) / 32);
     var feet = Math.floor((p.y + 50) / 32);
-    // Jump early at a wall, but at a ledge wait for the very lip: leaving a
-    // tile and a half of platform behind turns a 3-tile gap into a 5-tile one.
-    // And only for a real hole — a step down onto ground further below is
-    // walked off, not jumped, or the arc sails over the safe ground beyond.
+    // Jump early at a wall, at a ledge wait for the lip, and only for a real
+    // hole: a step down is walked off, or the arc sails over the ground beyond.
     var wall = g.solid(col + 1, feet - 1) || g.solid(col + 2, feet - 1);
     var lip = Math.floor((p.x + 38) / 32);
     var hole = true;

@@ -1,45 +1,42 @@
-/*  game.js — engine for the Mario platform game.
- *
- *  Everything is drawn onto one 1200x480 canvas (37.5 x 15 tiles of 32px).
- *  The level itself is a flat array of tile ids; see levels.js for the data
- *  and for the design rules the physics below imply.
- *
- *  Physics is deliberately unchanged from the original single-level version:
- *    gravity +1/frame, friction *0.9, accel 0.5/frame, jump impulse -25.
- *  Those four numbers give a 124px apex and a 160px running jump, which is
- *  what every level is built around — changing them invalidates the levels.
- */
+/* Mario — canvas platformer. Levels live in levels.js. */
 (function () {
   'use strict';
 
-  /* ------------------------------------------------------------ constants */
-  var TS = 32;                     // tile size
-  var VIEW_W = 1200, VIEW_H = 480;
+  var TS = 32, VIEW_W = 1200, VIEW_H = 480;
+
+  /* The levels are built around these four: 124px apex, 160px running jump.
+     Change them and every level needs re-checking. */
   var GRAVITY = 1, FRICTION = 0.9, ACCEL = 0.5, JUMP_IMPULSE = 25;
+
   var PLAYER_W = 32, PLAYER_H = 50;
-  var BOX_TOP = 18;                // collision box starts 18px below the sprite top
-  var DEATH_Y = VIEW_H - 62;       // fall past this and you are gone
+  var BOX_TOP = 18;                    // collision box starts this far down the sprite
+  var DEATH_Y = VIEW_H - 62;
   var START_LIVES = 3;
-  var TIME_TICK_MS = 400;          // one unit of the clock
+  var TIME_TICK_MS = 400;
   var POINTS_COIN = 100, POINTS_CLEAR = 1000, POINTS_PER_TIME = 10;
   var STORE_KEY = 'mario-platform-game/v1';
 
-  /* Source rectangles inside img/spritesheet.png */
+  /* Hold U to cheat: quadruple acceleration, a much bigger jump, and jumping in
+     mid-air. Handy for reaching the top of a level while building one. */
+  var BOOST_ACCEL = 2, BOOST_JUMP = 45;
+
+  /* rects in img/spritesheet.png */
   var SRC = {
-    sky:     [48, 336, 15, 15],
-    ground:  [0, 0, 16, 16],
-    coin:    [384, 0, 16, 16],
-    brick:   [16, 0, 16, 16],
-    stair:   [0, 16, 16, 16],
-    used:    [48, 0, 16, 16],
-    pole:    [257, 145, 15, 15],
-    pipeL:   [0, 144, 15, 15],
-    pipeR:   [16, 144, 16, 16],
-    pipeTL:  [0, 128, 16, 16],
-    pipeTR:  [16, 128, 16, 16]
+    sky:    [48, 336, 15, 15],
+    ground: [0, 0, 16, 16],
+    block:  [384, 0, 16, 16],
+    brick:  [16, 0, 16, 16],
+    stair:  [0, 16, 16, 16],
+    used:   [48, 0, 16, 16],
+    coin:   [384, 16, 16, 16],
+    pole:   [257, 145, 15, 15],
+    pipeL:  [0, 144, 15, 15],
+    pipeR:  [16, 144, 16, 16],
+    pipeTL: [0, 128, 16, 16],
+    pipeTR: [16, 128, 16, 16]
   };
 
-  /* Frames inside img/mario-sprites.png (all 32x50) */
+  /* frames in img/mario-sprites.png, all 32x50 */
   var MARIO = {
     standRight: 0, standLeft: 255,
     runRight: [0, 30], runLeft: [255, 290],
@@ -47,7 +44,6 @@
     climb: 385
   };
 
-  /* ------------------------------------------------------------ dom + state */
   var canvas = document.getElementById('game');
   var ctx = canvas.getContext('2d');
   canvas.width = VIEW_W;
@@ -64,8 +60,8 @@
   };
 
   var game = {
-    state: 'loading',      // loading | menu | playing | sliding | cleared | dead | gameover | won | paused
-    level: null,           // decoded level
+    state: 'loading',   // menu playing sliding cleared dead gameover won paused
+    level: null,
     levelIndex: 0,
     score: 0,
     coins: 0,
@@ -73,7 +69,7 @@
     time: 0,
     lastTick: 0,
     cameraX: 0,
-    flagY: 1,              // row the flag is drawn at, animates on clear
+    flagY: 1,
     seqTimer: 0,
     muted: false
   };
@@ -87,27 +83,33 @@
 
   var keys = {};
   var touchHeld = { left: false, right: false, jump: false };
+  var jumpWasDown = false;
+  var pops = [];                       // coins spat out of blocks
 
-  /* ------------------------------------------------------------ persistence */
+  /* ---------------------------------------------------------------- saved state */
+
   function loadStore() {
     try {
       var raw = localStorage.getItem(STORE_KEY);
       return raw ? JSON.parse(raw) : {};
     } catch (e) { return {}; }
   }
+
   function saveStore(patch) {
     try {
       var s = loadStore();
       for (var k in patch) s[k] = patch[k];
       localStorage.setItem(STORE_KEY, JSON.stringify(s));
-    } catch (e) { /* private mode — progress just won't persist */ }
+    } catch (e) { /* private mode: progress just won't stick */ }
   }
+
   var store = loadStore();
   var unlocked = Math.min(Math.max(store.unlocked || 1, 1), LEVELS.length);
   var bestScore = store.best || 0;
   game.muted = !!store.muted;
 
-  /* ------------------------------------------------------------ assets */
+  /* ---------------------------------------------------------------- assets */
+
   var images = {};
   var sounds = {};
   var skyPattern = null;
@@ -119,6 +121,7 @@
       flag:  'img/flag.png'
     };
     var pending = 0, failed = false;
+
     for (var key in srcs) {
       pending++;
       (function (k, src) {
@@ -130,15 +133,14 @@
       })(key, srcs[key]);
     }
 
-    var audioSrc = {
+    var audio = {
       bg: 'audio/bgsound.mp3', jump: 'audio/jump.wav', coin: 'audio/coin.wav',
       clear: 'audio/stage-clear.wav', die: 'audio/mario-die.wav'
     };
-    for (var a in audioSrc) {
-      var au = new Audio();
-      au.preload = 'auto';
-      au.src = audioSrc[a];
-      sounds[a] = au;
+    for (var a in audio) {
+      sounds[a] = new Audio();
+      sounds[a].preload = 'auto';
+      sounds[a].src = audio[a];
     }
     sounds.bg.loop = true;
     sounds.bg.volume = 0.35;
@@ -150,8 +152,9 @@
     if (!s) return;
     try { s.currentTime = 0; } catch (e) {}
     var p = s.play();
-    if (p && p.catch) p.catch(function () {});   // autoplay blocked — not fatal
+    if (p && p.catch) p.catch(function () {});
   }
+
   function music(on) {
     if (on && !game.muted) {
       var p = sounds.bg.play();
@@ -160,45 +163,50 @@
       sounds.bg.pause();
     }
   }
+
   function setMuted(m) {
     game.muted = m;
     saveStore({ muted: m });
     el.mute.textContent = m ? 'Sound: off' : 'Sound: on';
     el.mute.setAttribute('aria-pressed', String(m));
-    if (m) { sounds.bg.pause(); }
+    if (m) sounds.bg.pause();
     else if (game.state === 'playing') music(true);
   }
 
-  /* ------------------------------------------------------------ tiles */
+  /* ---------------------------------------------------------------- tiles */
+
   function tileAt(cx, cy) {
     var lv = game.level;
     if (cx < 0 || cx >= lv.cols) return TILE.GROUND;   // walls at both ends
-    if (cy < 0) return TILE.SKY;
-    if (cy >= lv.rows) return TILE.SKY;                // the void below
+    if (cy < 0 || cy >= lv.rows) return TILE.SKY;
     return lv.map[cy * lv.cols + cx];
   }
+
   function setTile(cx, cy, t) {
     var lv = game.level;
     if (cx >= 0 && cx < lv.cols && cy >= 0 && cy < lv.rows) lv.map[cy * lv.cols + cx] = t;
   }
+
   function isSolid(t) {
     return t !== TILE.SKY && t !== TILE.POLE && t !== TILE.FLAG;
   }
 
-  /* ------------------------------------------------------------ level flow */
-  /* The URL hash names the level, so a level is linkable and a refresh
-   * keeps you where you were: index.html#1-3 */
+  /* ---------------------------------------------------------------- level flow */
+
   var suppressHash = false;
+
   function levelFromHash() {
     var h = (location.hash || '').replace(/^#/, '').trim();
     for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === h) return i;
     return -1;
   }
+
   function writeHash(id) {
     if (location.hash.slice(1) === id) return;
     suppressHash = true;
     location.hash = id;
   }
+
   window.addEventListener('hashchange', function () {
     if (suppressHash) { suppressHash = false; return; }
     var i = levelFromHash();
@@ -213,6 +221,7 @@
     game.cameraX = 0;
     game.flagY = 1;
     game.seqTimer = 0;
+    pops.length = 0;
     resetPlayer();
     game.state = 'playing';
     writeHash(game.level.id);
@@ -234,10 +243,10 @@
     if (game.state !== 'playing') return;
     game.state = 'dead';
     game.seqTimer = 0;
+    game.lives--;
     music(false);
     play('die');
-    game.lives--;
-    player.speedY = -14;              // the classic little death hop
+    player.speedY = -14;
   }
 
   function afterDeath() {
@@ -285,7 +294,8 @@
     }
   }
 
-  /* ------------------------------------------------------------ input */
+  /* ---------------------------------------------------------------- input */
+
   var KEY_LEFT = { ArrowLeft: 1, KeyA: 1 };
   var KEY_RIGHT = { ArrowRight: 1, KeyD: 1 };
   var KEY_JUMP = { ArrowUp: 1, KeyW: 1, Space: 1 };
@@ -294,13 +304,16 @@
     for (var code in map) if (keys[code]) return true;
     return false;
   }
+
   function wantLeft()  { return held(KEY_LEFT) || touchHeld.left; }
   function wantRight() { return held(KEY_RIGHT) || touchHeld.right; }
   function wantJump()  { return held(KEY_JUMP) || touchHeld.jump; }
+  function boosting()  { return !!keys.KeyU; }
 
   window.addEventListener('keydown', function (e) {
     if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
     keys[e.code] = true;
+
     if (e.code === 'KeyM') setMuted(!game.muted);
     if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
     if (e.code === 'KeyR' && (game.state === 'playing' || game.state === 'paused')) {
@@ -314,9 +327,11 @@
       else if (game.state === 'gameover' || game.state === 'won') showMenu();
     }
   });
+
   window.addEventListener('keyup', function (e) { keys[e.code] = false; });
+
   window.addEventListener('blur', function () {
-    for (var k in keys) keys[k] = false;      // clear in place: other code holds this object
+    for (var k in keys) keys[k] = false;    // clear in place, others hold this object
   });
 
   function bindTouch(id, prop) {
@@ -330,6 +345,7 @@
     b.addEventListener('mouseup', set(false));
     b.addEventListener('mouseleave', set(false));
   }
+
   bindTouch('btn-left', 'left');
   bindTouch('btn-right', 'right');
   bindTouch('btn-jump', 'jump');
@@ -347,7 +363,8 @@
     }
   }
 
-  /* ------------------------------------------------------------ simulation */
+  /* ---------------------------------------------------------------- simulation */
+
   function step(now) {
     if (game.state === 'dead') {
       game.seqTimer++;
@@ -357,6 +374,7 @@
       if (game.seqTimer > 80) afterDeath();
       return;
     }
+
     if (game.state === 'sliding') {
       game.seqTimer++;
       var groundTop = groundRowUnder(game.level.poleCol) * TS;
@@ -365,9 +383,9 @@
       else if (game.seqTimer > 60) finishLevel();
       return;
     }
+
     if (game.state !== 'playing') return;
 
-    /* clock */
     while (now - game.lastTick >= TIME_TICK_MS) {
       game.lastTick += TIME_TICK_MS;
       game.time--;
@@ -375,19 +393,24 @@
       updateHud();
     }
 
-    /* horizontal input */
+    var boost = boosting();
+    var accel = boost ? BOOST_ACCEL : ACCEL;
+
     if (wantLeft()) {
-      player.speedX -= ACCEL;
+      player.speedX -= accel;
       player.faceRight = false;
       player.animTick++;
     }
     if (wantRight()) {
-      player.speedX += ACCEL;
+      player.speedX += accel;
       player.faceRight = true;
       player.animTick++;
     }
-    if (wantJump() && player.onGround) {
-      player.speedY -= JUMP_IMPULSE;
+    var jumpDown = wantJump();
+    var jumpPressed = jumpDown && !jumpWasDown;
+    jumpWasDown = jumpDown;
+    if (jumpDown && (player.onGround || (boost && jumpPressed))) {
+      player.speedY -= boost ? BOOST_JUMP : JUMP_IMPULSE;
       player.onGround = false;
       play('jump');
     }
@@ -401,6 +424,11 @@
     player.speedX *= FRICTION;
     player.speedY *= FRICTION;
 
+    if (player.y < -128) {                 // keep the cheat out of orbit
+      player.y = -128;
+      if (player.speedY < 0) player.speedY = 0;
+    }
+
     player.onGround = false;
     collide();
 
@@ -410,24 +438,16 @@
     chooseFrame();
   }
 
-  /* Which row of solid ground sits under a column (used by the pole slide). */
   function groundRowUnder(cx) {
     for (var y = 0; y < game.level.rows; y++) if (isSolid(tileAt(cx, y))) return y;
     return game.level.rows;
   }
 
-  /*  Collision resolution.
-   *  The player's box is 32 wide and 32 tall, sitting at the bottom of the
-   *  50px sprite: x .. x+32 horizontally, y+18 .. y+50 vertically. */
+  /* Box is 32x32 at the bottom of the 50px sprite. Vertical has to be resolved
+     before horizontal: gravity pushes him a pixel into the floor every frame, and
+     doing it the other way round reads that floor as a wall he is up against. */
   function collide() {
-    /*  Vertical first, then horizontal, and that order matters: gravity pushes
-     *  the player a pixel into the floor every frame, so resolving sideways
-     *  first would see the floor as a wall the box is touching and refuse to
-     *  let him walk. Landing snaps him back out, and only then is the box in
-     *  the right place to ask what is beside him. */
-
     if (player.speedY >= 0) {
-      /* landing: either bottom corner over a solid tile */
       var feetRow = Math.floor((player.y + PLAYER_H) / TS);
       var footL = Math.floor((player.x + 8) / TS);
       var footR = Math.floor((player.x + 24) / TS);
@@ -437,26 +457,19 @@
         player.onGround = true;
       }
     } else {
-      /* head: the tile the top of the box has risen into */
       var headCol = Math.floor((player.x + 16) / TS);
       var headRow = Math.floor((player.y + BOX_TOP) / TS);
       var above = tileAt(headCol, headRow);
       if (isSolid(above)) {
         player.y = (headRow + 1) * TS - BOX_TOP;
         player.speedY = 0;
-        if (above === TILE.COIN) {
-          setTile(headCol, headRow, TILE.USED);
-          game.coins++;
-          game.score += POINTS_COIN;
-          play('coin');
-          updateHud();
-        }
+        if (above === TILE.COIN) bumpCoinBlock(headCol, headRow);
       }
     }
 
-    /* sideways: check both tile rows the 32x32 box spans, then undo the move */
     var rowTop = Math.floor((player.y + BOX_TOP) / TS);
     var rowBottom = Math.floor((player.y + PLAYER_H - 1) / TS);
+
     if (player.speedX > 0) {
       var cxR = Math.floor((player.x + PLAYER_W) / TS);
       if (isSolid(tileAt(cxR, rowTop)) || isSolid(tileAt(cxR, rowBottom))) {
@@ -472,6 +485,25 @@
     }
   }
 
+  function bumpCoinBlock(cx, cy) {
+    setTile(cx, cy, TILE.USED);
+    game.coins++;
+    game.score += POINTS_COIN;
+    pops.push({ x: cx * TS, y: cy * TS, top: cy * TS, vy: -8.5, t: 0 });
+    play('coin');
+    updateHud();
+  }
+
+  function updatePops() {
+    for (var i = pops.length - 1; i >= 0; i--) {
+      var p = pops[i];
+      p.vy += 0.55;
+      p.y += p.vy;
+      p.t++;
+      if (p.y >= p.top) pops.splice(i, 1);
+    }
+  }
+
   function chooseFrame() {
     if (!player.onGround) {
       player.frame = player.faceRight ? MARIO.jumpRight : MARIO.jumpLeft;
@@ -483,7 +515,8 @@
     }
   }
 
-  /* ------------------------------------------------------------ drawing */
+  /* ---------------------------------------------------------------- drawing */
+
   function makeSkyPattern() {
     var c = document.createElement('canvas');
     c.width = TS; c.height = TS;
@@ -499,9 +532,7 @@
   function render() {
     var lv = game.level;
 
-    /* camera: keep the player ~40% from the left, clamped to the level */
-    var target = player.x - VIEW_W * 0.4;
-    game.cameraX = Math.max(0, Math.min(target, lv.width - VIEW_W));
+    game.cameraX = Math.max(0, Math.min(player.x - VIEW_W * 0.4, lv.width - VIEW_W));
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = skyPattern || '#5c94fc';
@@ -517,10 +548,9 @@
 
     for (var x = first; x <= last; x++) {
       for (var y = 0; y < lv.rows; y++) {
-        var t = lv.map[y * lv.cols + x];
-        switch (t) {
+        switch (lv.map[y * lv.cols + x]) {
           case TILE.GROUND:  drawTile(SRC.ground, x, y); break;
-          case TILE.COIN:    drawTile(SRC.coin, x, y); break;
+          case TILE.COIN:    drawTile(SRC.block, x, y); break;
           case TILE.BRICK:   drawTile(SRC.brick, x, y); break;
           case TILE.STAIR:   drawTile(SRC.stair, x, y); break;
           case TILE.USED:    drawTile(SRC.used, x, y); break;
@@ -530,12 +560,13 @@
           case TILE.PIPE_TL: drawTile(SRC.pipeTL, x, y); break;
           case TILE.PIPE_TR: drawTile(SRC.pipeTR, x, y); break;
           case TILE.FLAG:
-            ctx.drawImage(images.flag, 0, 0, 32, 32,
-                          x * TS + 10, game.flagY * TS, TS, TS);
+            ctx.drawImage(images.flag, 0, 0, 32, 32, x * TS + 10, game.flagY * TS, TS, TS);
             break;
         }
       }
     }
+
+    drawPops();
 
     ctx.drawImage(images.mario, player.frame, 0, 32, PLAYER_H,
                   Math.round(player.x), Math.round(player.y), PLAYER_W, PLAYER_H);
@@ -543,7 +574,18 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
-  /* ------------------------------------------------------------ hud + screens */
+  /* squashing the width as it rises fakes the spin */
+  function drawPops() {
+    for (var i = 0; i < pops.length; i++) {
+      var p = pops[i];
+      var w = Math.max(5, Math.abs(Math.cos(p.t * 0.38)) * TS);
+      ctx.drawImage(images.tiles, SRC.coin[0], SRC.coin[1], SRC.coin[2], SRC.coin[3],
+                    p.x + (TS - w) / 2, p.y, w, TS);
+    }
+  }
+
+  /* ---------------------------------------------------------------- hud + screens */
+
   function updateHud() {
     el.score.textContent = String(game.score).padStart(6, '0');
     el.coins.textContent = String(game.coins).padStart(2, '0');
@@ -556,6 +598,7 @@
     el.overlay.hidden = true;
     el.overlay.innerHTML = '';
   }
+
   function showOverlay(html, cls) {
     el.overlay.className = 'overlay' + (cls ? ' ' + cls : '');
     el.overlay.innerHTML = '<div class="panel">' + html + '</div>';
@@ -634,6 +677,7 @@
     else if (t.id === 'menu-btn') showMenu();
     else if (t.dataset.level !== undefined) startRun(parseInt(t.dataset.level, 10));
   });
+
   el.mute.addEventListener('click', function () { setMuted(!game.muted); });
 
   function startRun(index) {
@@ -645,15 +689,16 @@
     startLevel(index);
   }
 
-  /* ------------------------------------------------------------ main loop */
+  /* ---------------------------------------------------------------- main loop */
+
   function frame(now) {
     step(now);
+    updatePops();
     if (game.level) render();
     requestAnimationFrame(frame);
   }
 
-  /*  Debug handle. Handy from the console (MarioGame.player.x, MarioGame.start(2))
-   *  and it is what tools/playtest.py drives to verify every level is beatable. */
+  /* console handle, also what tools/playtest.py drives */
   window.MarioGame = {
     game: game, player: player, keys: keys, levels: LEVELS,
     get state() { return game.state; },
@@ -664,12 +709,12 @@
 
   loadAssets(function (failed) {
     if (failed) {
-      showOverlay('<h2>Assets failed to load</h2><p class="sub">Serve the folder over HTTP ' +
-                  '(see the README) rather than opening index.html from a zip.</p>');
+      showOverlay('<h2>Assets failed to load</h2><p class="sub">Serve the folder over ' +
+                  'HTTP (see the README) rather than opening index.html from a zip.</p>');
       return;
     }
     makeSkyPattern();
-    game.level = decodeLevel(LEVELS[0]);   // so something is on screen behind the menu
+    game.level = decodeLevel(LEVELS[0]);
     game.time = game.level.time;
     resetPlayer();
     setMuted(game.muted);

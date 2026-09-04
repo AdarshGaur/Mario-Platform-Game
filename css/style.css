@@ -1,6 +1,5 @@
-/*  style.css — chrome around the canvas.
- *  The game itself is drawn entirely in js/game.js; everything here is the
- *  HUD, the overlay screens and the touch pad. */
+/* Chrome around the canvas: HUD, overlay screens, touch pad.
+   The game itself is all drawn in js/game.js. */
 
 @font-face {
   font-family: mario;

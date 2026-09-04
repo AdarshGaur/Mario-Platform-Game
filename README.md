@@ -227,8 +227,8 @@ directory to `/`. No config file needed.
 The original version was one 500-line file with a single level, and the level
 could not actually be finished: at column 47 a four-tile-tall pipe blocks the
 way, and a running jump reaches 124px where 128px is needed. Past it, a ten-tile
-pit had no crossing at all. It was only passable with the undocumented `U` key,
-which added 10px/frame of speed.
+pit had no crossing at all. It was only passable using an
+undocumented speed cheat left in the code.
 
 * Level 1-1's two four-tile pipes are now three tiles, and the ten-tile pit has
   stepping stones. The rest of the layout is the original, tile for tile.
