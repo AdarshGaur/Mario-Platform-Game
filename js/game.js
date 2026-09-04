@@ -36,6 +36,11 @@
     pipeTR: [16, 128, 16, 16]
   };
 
+  /* Background clouds, drawn at double size. The long one is the top half of a
+     cloud split horizontally, so it only works flush with the top of the sky. */
+  var CLOUD_PUFF = [8, 352, 32, 24];
+  var CLOUD_LONG = [128, 352, 48, 16];
+
   /* frames in img/mario-sprites.png, all 32x50 */
   var MARIO = {
     standRight: 0, standLeft: 255,
@@ -85,6 +90,7 @@
   var touchHeld = { left: false, right: false, jump: false };
   var jumpWasDown = false;
   var pops = [];                       // coins spat out of blocks
+  var clouds = [];
 
   /* ---------------------------------------------------------------- saved state */
 
@@ -222,12 +228,34 @@
     game.flagY = 1;
     game.seqTimer = 0;
     pops.length = 0;
+    makeClouds(game.level);
     resetPlayer();
     game.state = 'playing';
     writeHash(game.level.id);
     hideOverlay();
     updateHud();
     music(true);
+  }
+
+  /* Fixed layout per level, seeded off its size so the sky is the same every
+     time you replay it. Clouds sit in the world and scroll with it. */
+  function makeClouds(lv) {
+    var seed = lv.cols * 7919 + 13;
+    function rnd() {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    }
+    clouds.length = 0;
+    var n = Math.max(3, Math.round(lv.width / 520));
+    var slot = lv.width / n;
+    for (var i = 0; i < n; i++) {
+      var long = rnd() < 0.28;
+      clouds.push({
+        src: long ? CLOUD_LONG : CLOUD_PUFF,
+        x: Math.round((i + 0.15 + rnd() * 0.6) * slot),
+        y: long ? 0 : 40 + Math.floor(rnd() * 104)
+      });
+    }
   }
 
   function resetPlayer() {
@@ -543,6 +571,8 @@
 
     ctx.translate(-Math.round(game.cameraX), 0);
 
+    drawClouds();
+
     var first = Math.max(0, Math.floor(game.cameraX / TS));
     var last = Math.min(lv.cols - 1, Math.ceil((game.cameraX + VIEW_W) / TS));
 
@@ -572,6 +602,15 @@
                   Math.round(player.x), Math.round(player.y), PLAYER_W, PLAYER_H);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  function drawClouds() {
+    for (var i = 0; i < clouds.length; i++) {
+      var c = clouds[i], s = c.src;
+      var w = s[2] * 2, h = s[3] * 2;
+      if (c.x + w < game.cameraX || c.x > game.cameraX + VIEW_W) continue;
+      ctx.drawImage(images.tiles, s[0], s[1], s[2], s[3], c.x, c.y, w, h);
+    }
   }
 
   /* squashing the width as it rises fakes the spin */
@@ -716,6 +755,7 @@
     makeSkyPattern();
     game.level = decodeLevel(LEVELS[0]);
     game.time = game.level.time;
+    makeClouds(game.level);
     resetPlayer();
     setMuted(game.muted);
     updateHud();

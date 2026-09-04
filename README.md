@@ -79,9 +79,9 @@ tools/              a level checker and a playtest bot (both optional, Python)
 `requestAnimationFrame` drives `step()` then `render()`. `step()` reads the held
 keys, integrates the player, resolves collisions, and checks the two end
 conditions (touched the flagpole / fell below the world). `render()` clamps the
-camera, paints the sky as a repeating pattern, and draws only the tile columns
-that are actually on screen — a 200-tile level costs the same per frame as a
-short one.
+camera, paints the sky as a repeating pattern, dots it with clouds placed at
+fixed points in the level, and draws only the tile columns that are actually on
+screen — a 200-tile level costs the same per frame as a short one.
 
 ### Levels are character art
 
